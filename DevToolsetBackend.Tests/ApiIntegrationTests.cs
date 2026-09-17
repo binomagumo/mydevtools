@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -51,6 +52,45 @@ public class ApiIntegrationTests
         Assert.Equal(HttpStatusCode.BadRequest, invalidBase64Response.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalidHashResponse.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalidJwtResponse.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/json/format", "{\"json\":\"\"}")]
+    [InlineData("/api/json/validate", "{\"json\":\"\"}")]
+    [InlineData("/api/json/minify", "{\"json\":\"\"}")]
+    [InlineData("/api/encoding/base64/encode", "{\"value\":\"\"}")]
+    [InlineData("/api/encoding/base64/decode", "{\"value\":\"\"}")]
+    [InlineData("/api/encoding/url/encode", "{\"value\":\"\"}")]
+    [InlineData("/api/encoding/url/decode", "{\"value\":\"\"}")]
+    [InlineData("/api/security/hash", "{\"value\":\"\",\"algorithm\":\"SHA256\"}")]
+    [InlineData("/api/security/jwt/decode", "\"\"")]
+    public async Task Tool_endpoints_reject_empty_input(string path, string body)
+    {
+        using WebApplicationFactory<Program> factory = CreateFactory();
+        using HttpClient client = factory.CreateClient();
+        using StringContent content = new(body, Encoding.UTF8, "application/json");
+
+        using HttpResponseMessage response = await client.PostAsync(path, content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("not-a-jwt")]
+    [InlineData("eyJhbGciOiJub25lIn0.invalid.")]
+    public async Task Malformed_jwt_is_rejected_without_echoing_token(string token)
+    {
+        using WebApplicationFactory<Program> factory = CreateFactory();
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync(
+            "/api/security/jwt/decode",
+            token
+        );
+        string body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.DoesNotContain(token, body);
     }
 
     [Fact]
