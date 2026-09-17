@@ -1,0 +1,101 @@
+name: Deploy Azure Container Apps
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: devtoolset-production
+      cancel-in-progress: false
+    env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      REGISTRY: ${{ vars.AZURE_REGISTRY }}
+      WEB_APP: devtoolset-web
+      API_APP: devtoolset-api
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name "$REGISTRY"
+
+      - name: Build and push images
+        run: |
+          docker build -f DevToolsetBackend/Dockerfile -t "$REGISTRY.azurecr.io/devtoolset-api:$IMAGE_TAG" .
+          docker build -f DevToolsetFrontend/Dockerfile -t "$REGISTRY.azurecr.io/devtoolset-web:$IMAGE_TAG" DevToolsetFrontend
+          docker push "$REGISTRY.azurecr.io/devtoolset-api:$IMAGE_TAG"
+          docker push "$REGISTRY.azurecr.io/devtoolset-web:$IMAGE_TAG"
+
+      - name: Pin current traffic for staged rollout
+        run: |
+          set -euo pipefail
+          for app in "$API_APP" "$WEB_APP"; do
+            revision=$(az containerapp revision list --name "$app" --resource-group "$RESOURCE_GROUP" --query '[?properties.trafficWeight==`100`].name | [0]' -o tsv)
+            if [ -z "$revision" ]; then
+              echo "Expected one revision receiving 100% of $app traffic" >&2
+              exit 1
+            fi
+            az containerapp ingress traffic set --name "$app" --resource-group "$RESOURCE_GROUP" --revision-weight "$revision=100"
+            if [ "$app" = "$API_APP" ]; then
+              echo "OLD_API_REVISION=$revision" >> "$GITHUB_ENV"
+            else
+              echo "OLD_WEB_REVISION=$revision" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Create and verify new revisions
+        run: |
+          set -euo pipefail
+          suffix="r${GITHUB_RUN_ID}a${GITHUB_RUN_ATTEMPT}"
+          az containerapp update --name "$API_APP" --resource-group "$RESOURCE_GROUP" --image "$REGISTRY.azurecr.io/devtoolset-api:$IMAGE_TAG" --revision-suffix "$suffix"
+          az containerapp update --name "$WEB_APP" --resource-group "$RESOURCE_GROUP" --image "$REGISTRY.azurecr.io/devtoolset-web:$IMAGE_TAG" --revision-suffix "$suffix"
+          for app in "$API_APP" "$WEB_APP"; do
+            revision="$app-$suffix"
+            for attempt in {1..30}; do
+              state=$(az containerapp revision show --name "$app" --resource-group "$RESOURCE_GROUP" --revision "$revision" --query properties.healthState -o tsv)
+              if [ "$state" = "Healthy" ]; then
+                break
+              fi
+              if [ "$state" = "Unhealthy" ] || [ "$attempt" -eq 30 ]; then
+                echo "$revision did not become healthy (state: $state)" >&2
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+          echo "NEW_API_REVISION=$API_APP-$suffix" >> "$GITHUB_ENV"
+          echo "NEW_WEB_REVISION=$WEB_APP-$suffix" >> "$GITHUB_ENV"
+
+      - name: Shift traffic and smoke test public origin
+        run: |
+          set -euo pipefail
+          rollback() {
+            az containerapp ingress traffic set --name "$WEB_APP" --resource-group "$RESOURCE_GROUP" --revision-weight "$OLD_WEB_REVISION=100" || true
+            az containerapp ingress traffic set --name "$API_APP" --resource-group "$RESOURCE_GROUP" --revision-weight "$OLD_API_REVISION=100" || true
+          }
+          trap rollback ERR
+          az containerapp ingress traffic set --name "$API_APP" --resource-group "$RESOURCE_GROUP" --revision-weight "$NEW_API_REVISION=100"
+          az containerapp ingress traffic set --name "$WEB_APP" --resource-group "$RESOURCE_GROUP" --revision-weight "$NEW_WEB_REVISION=100"
+          external=$(az containerapp show --name "$API_APP" --resource-group "$RESOURCE_GROUP" --query properties.configuration.ingress.external -o tsv)
+          test "$external" = "false"
+          fqdn=$(az containerapp show --name "$WEB_APP" --resource-group "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          bash infra/azure/smoke.sh "https://$fqdn"
+          trap - ERR

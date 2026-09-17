@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="DevToolsetBackend.csproj" />
+  <Project Path="..\DevToolsetBackend.Tests\DevToolsetBackend.Tests.csproj" />
+</Solution>

@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  workflow_call:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: Restore backend
+        run: dotnet restore DevToolsetBackend/DevToolsetBackend.slnx --configfile NuGet.Config
+
+      - name: Test backend
+        run: dotnet test DevToolsetBackend/DevToolsetBackend.slnx --no-restore --configuration Release
+
+      - name: Build backend
+        run: dotnet build DevToolsetBackend/DevToolsetBackend.slnx --no-restore --configuration Release
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: DevToolsetFrontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: DevToolsetFrontend
+        run: npm ci
+
+      - name: Audit production dependencies
+        working-directory: DevToolsetFrontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint frontend
+        working-directory: DevToolsetFrontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: DevToolsetFrontend
+        env:
+          API_INTERNAL_URL: http://devtoolset-api
+        run: npm run build
+
+      - name: Install Playwright browser
+        working-directory: DevToolsetFrontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser and accessibility tests
+        working-directory: DevToolsetFrontend
+        run: npm run test:e2e
+
+      - name: Build production images
+        run: |
+          docker build -f DevToolsetBackend/Dockerfile -t devtoolset-api:ci .
+          docker build -f DevToolsetFrontend/Dockerfile -t devtoolset-web:ci DevToolsetFrontend
