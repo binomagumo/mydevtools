@@ -5,6 +5,7 @@ DevToolset is a privacy-conscious collection of developer utilities with a Next.
 ## Projects
 
 - `DevToolsetBackend` — ASP.NET Core Web API targeting .NET 10
+- `DevToolsetBackend.Tests` — tests for the backend, not a second backend service
 - `DevToolsetFrontend` — Next.js 15, React 19, and TypeScript application
 
 The frontend exposes tools for JSON formatting, validation, and minification; Base64 and URL encoding; JWT inspection; SHA-256, SHA-384, and SHA-512 hashing; and UUID generation.
@@ -17,29 +18,14 @@ The frontend exposes tools for JSON formatting, validation, and minification; Ba
 
 ## Run locally
 
-Start the backend with the HTTP profile:
-
-```powershell
-dotnet run --project .\DevToolsetBackend --launch-profile http
-```
-
-The backend is available at `http://localhost:5183`. The health endpoint is `GET /api/health`.
-
-The HTTPS profile requires a trusted local .NET developer certificate:
-
-```powershell
-dotnet dev-certs https --trust
-dotnet run --project .\DevToolsetBackend --launch-profile https
-```
-
-Then install and start the frontend:
+Install frontend dependencies once, then start both services from the repository root:
 
 ```powershell
 npm ci --prefix .\DevToolsetFrontend
-npm run dev --prefix .\DevToolsetFrontend
+npm run dev
 ```
 
-Open `http://localhost:3000`. The frontend proxies browser API calls through `/api-proxy` to the backend URL configured by `DevToolsetFrontend/.env.local`. Copy `DevToolsetFrontend/.env.example` when setting up a new machine.
+Open the frontend URL printed in the terminal (usually `http://localhost:3000`). The backend runs at `http://localhost:5183`; stop both with Ctrl+C. The frontend proxies browser API calls through `/api-proxy`. Copy `DevToolsetFrontend/.env.example` to `.env.local` only if you need to change the default local configuration.
 
 ## Validation
 
@@ -61,18 +47,16 @@ Local frontend configuration targets the backend HTTP profile:
 API_INTERNAL_URL=http://localhost:5183
 ```
 
-For production, set `API_INTERNAL_URL` to the private API service URL before starting the frontend. In Azure Container Apps this is the internal service name, for example `http://devtoolset-api`; it must not be a public API URL.
+For production, set `API_INTERNAL_URL` to the private API service URL before starting the frontend. It must not be a public API URL.
 
 ## Production deployment
 
-The supported production topology is documented in [`infra/azure/README.md`](infra/azure/README.md). It uses separate frontend and API Container Apps behind one public frontend origin. The API has internal ingress only, and Azure terminates public TLS.
-
-The production images are built from:
+AWS deployment is not configured yet. The existing production Dockerfiles can be used when the AWS setup is chosen:
 
 - `DevToolsetFrontend/Dockerfile`
 - `DevToolsetBackend/Dockerfile`
 
-The GitHub Actions workflows run clean installs, tests, lint/build checks, container builds, and an explicit Azure deployment workflow.
+GitHub Actions runs clean installs, tests, lint/build checks, and container builds. Local environment files and generated build artifacts are excluded from Git.
 
 ## Notes
 
