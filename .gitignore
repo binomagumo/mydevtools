@@ -15,7 +15,15 @@
 *.pfx
 *.key
 *.crt
+*.p12
+*.jks
+.aws/
+.ssh/
+npm-debug.log*
+.DS_Store
 premium-audit.json
 TestResults/
 **/test-results/
 **/playwright-report/
+DESIGN.md
+UX-CONTRACT.md
