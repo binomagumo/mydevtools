@@ -52,8 +52,8 @@ export default function PrivacyPage() {
             </p>
             <p className="mt-2">
               Application logs are configured not to include request bodies,
-              JWTs, secrets, or generated tool output. Production console and
-              system logs are retained for 30 days in Azure Log Analytics.
+              JWTs, secrets, or generated tool output. Log retention depends on
+              the production hosting configuration.
             </p>
           </section>
 
