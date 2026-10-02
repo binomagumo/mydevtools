@@ -1,0 +1,38 @@
+name: devtoolset
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: DevToolsetBackend/Dockerfile
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../DevToolsetFrontend
+      args:
+        API_INTERNAL_URL: http://api:8080
+    environment:
+      API_INTERNAL_URL: http://api:8080
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in deploy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

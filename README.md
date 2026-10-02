@@ -51,10 +51,7 @@ For production, set `API_INTERNAL_URL` to the private API service URL before sta
 
 ## Production deployment
 
-AWS deployment is not configured yet. The existing production Dockerfiles can be used when the AWS setup is chosen:
-
-- `DevToolsetFrontend/Dockerfile`
-- `DevToolsetBackend/Dockerfile`
+See [AWS-DEPLOY.md](AWS-DEPLOY.md) for the EC2, Docker Compose, HTTPS, and Hostinger DNS steps.
 
 GitHub Actions runs clean installs, tests, lint/build checks, and container builds. Local environment files and generated build artifacts are excluded from Git.
 

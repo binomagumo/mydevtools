@@ -3,3 +3,12 @@ obj
 .vs
 *.user
 *.suo
+**/.env*
+**/*.pem
+**/*.pfx
+**/*.key
+**/*.crt
+**/*.p12
+**/*.jks
+**/.aws
+**/.ssh

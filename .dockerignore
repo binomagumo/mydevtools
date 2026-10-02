@@ -1,5 +1,6 @@
 .git
 .vs
+**/.vs
 **/bin
 **/obj
 **/node_modules
@@ -8,5 +9,20 @@
 **/coverage
 **/TestResults
 **/*.tsbuildinfo
+**/*.user
+**/*.suo
+**/npm-debug.log*
+**/.DS_Store
 **/.env*
 !**/.env.example
+**/*.pem
+**/*.pfx
+**/*.key
+**/*.crt
+**/*.p12
+**/*.jks
+**/.aws
+**/.ssh
+**/test-results
+**/playwright-report
+premium-audit.json
